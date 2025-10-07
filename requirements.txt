@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+pandas
+numpy
+chardet
+PyPDF2
+python-multipart
+pydantic[email]
+sqlalchemy
+psycopg2-binary
+python-dotenv
+alembic
+python-jose[cryptography]
+passlib[bcrypt]
+pytest
+pytest-asyncio
+httpx
