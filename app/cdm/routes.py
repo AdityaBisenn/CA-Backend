@@ -1,5 +1,5 @@
 # app/cdm/routes.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -18,6 +18,18 @@ from app.cdm.models.external import BankStatement, GSTSales, GSTPurchases
 from app.cdm.models.reconciliation import ReconciliationLog
 
 from app.cdm.schemas.entity import EntityCreate, EntityUpdate, EntityResponse
+from app.cdm.schemas.transaction import VoucherHeaderCreate, VoucherHeaderResponse, VoucherLineCreate
+
+def get_user_accessible_firms(db: Session, user: AuthenticatedUser) -> List[str]:
+    """Get list of firm IDs that user has access to"""
+    if user.role == UserRole.TRENOR_ADMIN:
+        # Admin has access to all firms
+        return []  # Empty list means no restriction
+    elif user.firm_id:
+        return [user.firm_id]
+    else:
+        return []
+
 from app.cdm.schemas.master import (
     GroupCreate, GroupUpdate, GroupResponse,
     LedgerCreate, LedgerUpdate, LedgerResponse,
@@ -79,7 +91,9 @@ def get_entities(
     query = db.query(Entity)
     query = apply_tenant_filter(query, Entity, current_user, db)
     entities = query.offset(skip).limit(limit).all()
-    return entities@router.get("/entities/{entity_id}", response_model=EntityResponse)
+    return entities
+
+@router.get("/entities/{entity_id}", response_model=EntityResponse)
 def get_entity(
     entity_id: str, 
     db: Session = Depends(get_db),
@@ -89,6 +103,11 @@ def get_entity(
     query = db.query(Entity).filter(Entity.company_id == entity_id)
     query = apply_tenant_filter(query, Entity, current_user, db)
     entity = query.first()
+    
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    return entity
 
 @router.put("/entities/{entity_id}", response_model=EntityResponse)
 def update_entity(
@@ -223,42 +242,106 @@ def get_tax_ledgers(company_id: Optional[str] = None, skip: int = 0, limit: int 
 # ==================== VOUCHER ROUTES ====================
 
 @router.post("/vouchers", response_model=VoucherHeaderResponse, status_code=status.HTTP_201_CREATED)
-def create_voucher(voucher: VoucherHeaderCreate, db: Session = Depends(get_db)):
-    """Create a new voucher with lines"""
-    # Create voucher header
-    voucher_data = voucher.dict()
-    lines_data = voucher_data.pop('lines', [])
+def create_voucher(
+    voucher: VoucherHeaderCreate, 
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_staff_access)
+):
+    """Create a new voucher"""
     
-    db_voucher = VoucherHeader(**voucher_data)
+    # Verify user has access to the company
+    if current_user.role != UserRole.TRENOR_ADMIN:
+        accessible_firms = get_user_accessible_firms(db, current_user)
+        company = db.query(Entity).filter(Entity.company_id == voucher.company_id).first()
+        if not company or company.firm_id not in accessible_firms:
+            raise HTTPException(status_code=403, detail="Access denied to this company")
+    
+    # Create voucher header
+    db_voucher = VoucherHeader(
+        company_id=voucher.company_id,
+        voucher_number=voucher.voucher_number,
+        voucher_type=voucher.voucher_type,
+        voucher_date=voucher.voucher_date,
+        party_ledger_id=voucher.party_ledger_id,
+        total_amount=voucher.total_amount,
+        narration=voucher.narration,
+        status=voucher.status
+    )
+    
     db.add(db_voucher)
-    db.flush()  # Get the voucher ID
+    db.commit()
+    db.refresh(db_voucher)
     
     # Create voucher lines
-    for line_data in lines_data:
-        line_data['voucher_id'] = db_voucher.voucher_id
-        line_data['company_id'] = voucher.company_id
-        db_line = VoucherLine(**line_data)
+    for line_data in voucher.lines:
+        db_line = VoucherLine(
+            voucher_id=db_voucher.voucher_id,
+            ledger_id=line_data.ledger_id,
+            debit_amount=line_data.debit_amount,
+            credit_amount=line_data.credit_amount,
+            line_narration=line_data.line_narration
+        )
         db.add(db_line)
     
     db.commit()
-    db.refresh(db_voucher)
     return db_voucher
 
 @router.get("/vouchers", response_model=List[VoucherHeaderResponse])
-def get_vouchers(company_id: Optional[str] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Get vouchers, optionally filtered by company"""
+def get_vouchers(
+    skip: int = 0, 
+    limit: int = 100,
+    voucher_type: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    status: Optional[str] = None,
+    company_id: Optional[str] = Header(None, alias="X-Company-ID"),
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_staff_access)
+):
+    """Get vouchers for current CA firm with filtering"""
+    
     query = db.query(VoucherHeader)
+    
+    # Apply tenant filtering based on user access
+    accessible_firms = get_user_accessible_firms(db, current_user)
+    if current_user.role != UserRole.TRENOR_ADMIN and accessible_firms:
+        query = query.join(Entity).filter(Entity.firm_id.in_(accessible_firms))
+    
+    # Apply company filter if provided
     if company_id:
         query = query.filter(VoucherHeader.company_id == company_id)
+    
+    # Apply additional filters
+    if voucher_type:
+        query = query.filter(VoucherHeader.voucher_type == voucher_type)
+    if status:
+        query = query.filter(VoucherHeader.status == status)
+    if from_date:
+        query = query.filter(VoucherHeader.voucher_date >= from_date)  
+    if to_date:
+        query = query.filter(VoucherHeader.voucher_date <= to_date)
+    
     vouchers = query.offset(skip).limit(limit).all()
     return vouchers
 
 @router.get("/vouchers/{voucher_id}", response_model=VoucherHeaderResponse)
-def get_voucher(voucher_id: str, db: Session = Depends(get_db)):
+def get_voucher(
+    voucher_id: str, 
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_staff_access)
+):
     """Get voucher by ID with lines"""
     voucher = db.query(VoucherHeader).filter(VoucherHeader.voucher_id == voucher_id).first()
     if not voucher:
         raise HTTPException(status_code=404, detail="Voucher not found")
+    
+    # Verify user has access to this voucher's company
+    if current_user.role != UserRole.TRENOR_ADMIN:
+        accessible_firms = get_user_accessible_firms(db, current_user)
+        company = db.query(Entity).filter(Entity.company_id == voucher.company_id).first()
+        if not company or (accessible_firms and company.firm_id not in accessible_firms):
+            raise HTTPException(status_code=403, detail="Access denied to this voucher")
+    
     return voucher
 
 # ==================== RECONCILIATION ROUTES ====================
