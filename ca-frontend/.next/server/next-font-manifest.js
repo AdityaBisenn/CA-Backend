@@ -1,1 +1,1 @@
-self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/Users/adityabisen/Desktop/CA Updates Agent/CA-Backend/ca-frontend/src/app/layout\":[\"static/media/e4af272ccee01ff0-s.p.woff2\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"
+self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/Users/adityabisen/Desktop/CA Updates Agent/CA-App/CA-Backend/ca-frontend/src/app/layout\":[\"static/media/e4af272ccee01ff0-s.p.woff2\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"

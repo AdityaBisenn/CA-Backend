@@ -1,4 +1,4 @@
-// File: /Users/adityabisen/Desktop/CA Updates Agent/CA-Backend/ca-frontend/src/app/layout.tsx
+// File: /Users/adityabisen/Desktop/CA Updates Agent/CA-App/CA-Backend/ca-frontend/src/app/layout.tsx
 import * as entry from '../../../src/app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

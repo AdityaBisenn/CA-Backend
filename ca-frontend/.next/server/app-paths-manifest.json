@@ -2,9 +2,8 @@
   "/not-found": "app/not-found.js",
   "/login/page": "app/login/page.js",
   "/dashboard/entities/page": "app/dashboard/entities/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
   "/dashboard/reconciliation/page": "app/dashboard/reconciliation/page.js",
   "/dashboard/reports/page": "app/dashboard/reports/page.js",
-  "/dashboard/users/page": "app/dashboard/users/page.js",
-  "/dashboard/vouchers/page": "app/dashboard/vouchers/page.js",
-  "/dashboard/page": "app/dashboard/page.js"
+  "/dashboard/vouchers/page": "app/dashboard/vouchers/page.js"
 }

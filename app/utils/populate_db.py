@@ -1,6 +1,14 @@
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# If this file is executed directly (python app/utils/populate_db.py) the package
+# root may not be on sys.path which causes `ModuleNotFoundError: No module named 'app'`.
+# When imported as a package (python -m app.utils.populate_db) this is not needed.
+if __name__ == "__main__":
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        # Prepend repo root so imports like `from app.core.database import ...` work
+        sys.path.insert(0, repo_root)
 
 from sqlalchemy.orm import Session
 from app.core.database import engine, Base

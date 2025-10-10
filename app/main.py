@@ -1,5 +1,5 @@
 # app/main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.ingestion.routes import router as ingestion_router
 from app.cdm.routes import router as cdm_router
@@ -7,6 +7,8 @@ from app.tenant.routes import firm_router, user_router
 from app.auth.routes import router as auth_router
 from app.api.ai_routes import router as ai_router
 from app.core.database import engine, Base
+from app.core.logger import log_request
+import time
 
 # Database tables are now managed by Alembic migrations
 # Run: alembic upgrade head
@@ -53,6 +55,45 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Request logging middleware
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    start = time.time()
+    response = None
+    status_code = 500  # Default for exceptions
+    
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+    except Exception as exc:
+        # Log the error but re-raise
+        status_code = 500
+        raise
+    finally:
+        duration_ms = int((time.time() - start) * 1000)
+        client = None
+        try:
+            client = request.client.host if request.client else None
+        except Exception:
+            client = None
+
+        user_agent = request.headers.get("user-agent")
+        auth_present = "authorization" in request.headers
+        # Avoid logging any sensitive header values; only record presence
+        log_request(
+            method=request.method,
+            path=str(request.url.path),
+            status_code=status_code,
+            duration_ms=duration_ms,
+            client=client,
+            user_agent=user_agent,
+            auth_present=auth_present,
+        )
+    
+    return response
+
 
 # Include routers
 app.include_router(auth_router, prefix="/api/v1")  # Authentication routes (public)
