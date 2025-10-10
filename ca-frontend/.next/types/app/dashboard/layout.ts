@@ -1,4 +1,4 @@
-// File: /Users/adityabisen/Desktop/CA Updates Agent/CA-Copilot/verified_ai_layer_backend/ca-frontend/src/app/dashboard/layout.tsx
+// File: /Users/adityabisen/Desktop/CA Updates Agent/CA-Backend/ca-frontend/src/app/dashboard/layout.tsx
 import * as entry from '../../../../src/app/dashboard/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

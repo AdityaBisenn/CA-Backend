@@ -18,10 +18,38 @@ app = FastAPI(
 )
 
 # Add CORS middleware for frontend integration
+import os
+import json
+
+
+# Configure CORS origins from environment variable `ALLOWED_ORIGINS`.
+# Support either a JSON-style array (e.g. ["http://localhost:3000"]) or a
+# comma-separated string (e.g. http://localhost:3000,http://127.0.0.1:3000).
+def _parse_allowed_origins(env_val: str | None):
+    if not env_val:
+        return ["*"]
+    env_val = env_val.strip()
+    # Try JSON parse first
+    try:
+        parsed = json.loads(env_val)
+        if isinstance(parsed, list):
+            return parsed
+    except Exception:
+        pass
+    # Fallback: comma-separated
+    return [o.strip() for o in env_val.split(",") if o.strip()]
+
+
+allowed_origins = _parse_allowed_origins(os.getenv("ALLOWED_ORIGINS"))
+
+# If allowed_origins is ['*'] then allow_credentials must be False to comply
+# with browser CORS rules when requests include credentials.
+allow_credentials = False if allowed_origins == ["*"] else True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

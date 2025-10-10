@@ -357,3 +357,199 @@ def trigger_reconciliation(company_id: str, db: Session = Depends(get_db)):
     """Trigger AI-powered reconciliation for a company"""
     # This would implement the AI matching logic
     return {"message": "AI reconciliation triggered", "company_id": company_id}
+
+# ==================== EXTERNAL DATA ROUTES ====================
+
+@router.get("/bank-statements")
+def get_bank_statements(
+    skip: int = 0,
+    limit: int = 100,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    reconciliation_status: Optional[str] = None,
+    current_user: AuthenticatedUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    x_company_id: str = Header(..., alias="X-Company-ID")
+):
+    """Get bank statements for a company"""
+    # Verify access to company
+    accessible_firms = get_user_accessible_firms(db, current_user)
+    company = db.query(Entity).filter(Entity.company_id == x_company_id).first()
+    if not company or (accessible_firms and company.firm_id not in accessible_firms):
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+    
+    query = db.query(BankStatement).filter(BankStatement.company_id == x_company_id)
+    
+    if from_date:
+        query = query.filter(BankStatement.transaction_date >= from_date)
+    if to_date:
+        query = query.filter(BankStatement.transaction_date <= to_date)
+    if reconciliation_status:
+        query = query.filter(BankStatement.reconciliation_status == reconciliation_status)
+    
+    statements = query.offset(skip).limit(limit).all()
+    return statements
+
+@router.get("/gst-sales")
+def get_gst_sales(
+    skip: int = 0,
+    limit: int = 100,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    reconciliation_status: Optional[str] = None,
+    current_user: AuthenticatedUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    x_company_id: str = Header(..., alias="X-Company-ID")
+):
+    """Get GST sales records for a company"""
+    # Verify access to company
+    accessible_firms = get_user_accessible_firms(db, current_user)
+    company = db.query(Entity).filter(Entity.company_id == x_company_id).first()
+    if not company or (accessible_firms and company.firm_id not in accessible_firms):
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+    
+    query = db.query(GSTSales).filter(GSTSales.company_id == x_company_id)
+    
+    if from_date:
+        query = query.filter(GSTSales.invoice_date >= from_date)
+    if to_date:
+        query = query.filter(GSTSales.invoice_date <= to_date)
+    if reconciliation_status:
+        query = query.filter(GSTSales.reconciliation_status == reconciliation_status)
+    
+    sales = query.offset(skip).limit(limit).all()
+    return sales
+
+@router.get("/gst-purchases")
+def get_gst_purchases(
+    skip: int = 0,
+    limit: int = 100,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    reconciliation_status: Optional[str] = None,
+    current_user: AuthenticatedUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    x_company_id: str = Header(..., alias="X-Company-ID")
+):
+    """Get GST purchases records for a company"""
+    # Verify access to company
+    accessible_firms = get_user_accessible_firms(db, current_user)
+    company = db.query(Entity).filter(Entity.company_id == x_company_id).first()
+    if not company or (accessible_firms and company.firm_id not in accessible_firms):
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+    
+    query = db.query(GSTPurchases).filter(GSTPurchases.company_id == x_company_id)
+    
+    if from_date:
+        query = query.filter(GSTPurchases.invoice_date >= from_date)
+    if to_date:
+        query = query.filter(GSTPurchases.invoice_date <= to_date)
+    if reconciliation_status:
+        query = query.filter(GSTPurchases.reconciliation_status == reconciliation_status)
+    
+    purchases = query.offset(skip).limit(limit).all()
+    return purchases
+
+# ==================== DASHBOARD ROUTES ====================
+
+@router.get("/dashboard/stats")
+def get_dashboard_stats(
+    current_user: AuthenticatedUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    x_company_id: str = Header(..., alias="X-Company-ID")
+):
+    """Get dashboard statistics for a company"""
+    # Verify access to company
+    accessible_firms = get_user_accessible_firms(db, current_user)
+    company = db.query(Entity).filter(Entity.company_id == x_company_id).first()
+    if not company or (accessible_firms and company.firm_id not in accessible_firms):
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+    
+    # Get counts
+    total_vouchers = db.query(VoucherHeader).filter(VoucherHeader.company_id == x_company_id).count()
+    total_bank_statements = db.query(BankStatement).filter(BankStatement.company_id == x_company_id).count()
+    matched_bank = db.query(BankStatement).filter(
+        BankStatement.company_id == x_company_id,
+        BankStatement.reconciliation_status == "Matched"
+    ).count()
+    
+    # Calculate totals
+    voucher_sum = db.query(VoucherHeader).filter(VoucherHeader.company_id == x_company_id).all()
+    total_amount = sum(v.total_amount or 0 for v in voucher_sum)
+    
+    # Recent records
+    recent_vouchers = db.query(VoucherHeader).filter(
+        VoucherHeader.company_id == x_company_id
+    ).order_by(VoucherHeader.voucher_date.desc()).limit(5).all()
+    
+    recent_bank_statements = db.query(BankStatement).filter(
+        BankStatement.company_id == x_company_id
+    ).order_by(BankStatement.transaction_date.desc()).limit(5).all()
+    
+    return {
+        "total_entities": 1,  # For now, single entity per company
+        "total_vouchers": total_vouchers,
+        "total_amount": float(total_amount),
+        "pending_reconciliation": total_bank_statements - matched_bank,
+        "reconciliation_summary": {
+            "matched": matched_bank,
+            "unmatched": total_bank_statements - matched_bank,
+            "total": total_bank_statements
+        },
+        "recent_vouchers": recent_vouchers,
+        "recent_bank_statements": recent_bank_statements
+    }
+
+@router.get("/reconciliation/summary")
+def get_reconciliation_summary(
+    current_user: AuthenticatedUser = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    x_company_id: str = Header(..., alias="X-Company-ID")
+):
+    """Get reconciliation summary for a company"""
+    # Verify access to company
+    accessible_firms = get_user_accessible_firms(db, current_user)
+    company = db.query(Entity).filter(Entity.company_id == x_company_id).first()
+    if not company or (accessible_firms and company.firm_id not in accessible_firms):
+        raise HTTPException(status_code=403, detail="Access denied to this company")
+    
+    # Bank statements reconciliation
+    total_bank = db.query(BankStatement).filter(BankStatement.company_id == x_company_id).count()
+    matched_bank = db.query(BankStatement).filter(
+        BankStatement.company_id == x_company_id,
+        BankStatement.reconciliation_status == "Matched"
+    ).count()
+    
+    # GST reconciliation
+    total_gst_sales = db.query(GSTSales).filter(GSTSales.company_id == x_company_id).count()
+    matched_gst_sales = db.query(GSTSales).filter(
+        GSTSales.company_id == x_company_id,
+        GSTSales.reconciliation_status == "Matched"
+    ).count()
+    
+    total_gst_purchases = db.query(GSTPurchases).filter(GSTPurchases.company_id == x_company_id).count()
+    matched_gst_purchases = db.query(GSTPurchases).filter(
+        GSTPurchases.company_id == x_company_id,
+        GSTPurchases.reconciliation_status == "Matched"
+    ).count()
+    
+    return {
+        "bank_statements": {
+            "total": total_bank,
+            "matched": matched_bank,
+            "unmatched": total_bank - matched_bank,
+            "reconciliation_rate": (matched_bank / total_bank * 100) if total_bank > 0 else 0
+        },
+        "gst_sales": {
+            "total": total_gst_sales,
+            "matched": matched_gst_sales,
+            "unmatched": total_gst_sales - matched_gst_sales,
+            "reconciliation_rate": (matched_gst_sales / total_gst_sales * 100) if total_gst_sales > 0 else 0
+        },
+        "gst_purchases": {
+            "total": total_gst_purchases,
+            "matched": matched_gst_purchases,
+            "unmatched": total_gst_purchases - matched_gst_purchases,
+            "reconciliation_rate": (matched_gst_purchases / total_gst_purchases * 100) if total_gst_purchases > 0 else 0
+        }
+    }
