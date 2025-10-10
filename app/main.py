@@ -6,6 +6,7 @@ from app.cdm.routes import router as cdm_router
 from app.tenant.routes import firm_router, user_router
 from app.auth.routes import router as auth_router
 from app.api.ai_routes import router as ai_router
+from app.ram.routes import router as ram_router
 from app.core.database import engine, Base
 from app.core.logger import log_request
 import time
@@ -102,13 +103,14 @@ app.include_router(user_router, prefix="/api/v1/tenant")
 app.include_router(ingestion_router, prefix="/api/v1")
 app.include_router(cdm_router, prefix="/api/v1")
 app.include_router(ai_router, prefix="/api/v1")  # AI-powered features
+app.include_router(ram_router, prefix="/api/v1")  # RAM Cognitive Framework
 
 @app.get("/")
 def root():
     return {
-        "message": "Agentic AI Layer Backend Running 🚀",
+        "message": "CA Verified AI Layer Backend with RAM Cognitive Framework 🚀",
         "version": "2.1.0",
-        "modules": ["ingestion", "cdm", "reconciliation", "ai-analytics"],
-        "features": ["JWT Authentication", "Multi-tenant", "AI-Powered Reconciliation"],
+        "modules": ["ingestion", "cdm", "reconciliation", "ai-analytics", "ram-cognitive"],
+        "features": ["JWT Authentication", "Multi-tenant", "AI-Powered Reconciliation", "RAM Cognitive Framework"],
         "docs": "/docs"
     }
